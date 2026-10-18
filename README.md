@@ -5,15 +5,90 @@ Aplicação web para autoavaliação de hábitos relacionados ao sono e ao ritmo
 ## Tecnologias
 
 - Java 21 e Spring Boot 4.1.1
-- Maven
-- MySQL
+- Maven (Maven Wrapper)
+- MySQL 8.4
 - HTML, CSS e JavaScript
+- Docker e Docker Compose (execução conteinerizada)
 
-## Como executar
+## Estrutura relevante
+
+```text
+.
+├── docker-compose.yml
+├── backend/
+│   └── ciclo-circadiano/
+│       ├── Dockerfile
+│       ├── .env                 # criado localmente; não versionar
+│       ├── .env.example         # modelo de variáveis
+│       ├── mvnw
+│       ├── pom.xml
+│       └── src/
+└── frontend/
+    ├── Dockerfile
+    ├── nginx.conf
+    └── index.html
+```
+
+## Executar com Docker Compose (recomendado)
+
+Pré-requisitos: Docker Engine/Desktop com o comando `docker compose` disponível.
+
+1. Crie o arquivo de ambiente a partir do modelo:
+
+   **PowerShell:**
+   ```powershell
+   Copy-Item backend/ciclo-circadiano/.env.example backend/ciclo-circadiano/.env
+   ```
+
+   Edite `backend/ciclo-circadiano/.env` e defina senhas fortes para `DB_PASSWORD` e `MYSQL_ROOT_PASSWORD`, além de uma `JWT_SECRET` com pelo menos 32 caracteres. Não compartilhe nem versione esse arquivo.
+
+2. Na raiz do repositório, passe o arquivo de ambiente explicitamente (o Compose usa esse arquivo também para interpolar as variáveis `${...}`) e inicie os serviços:
+
+   ```bash
+   docker compose --env-file backend/ciclo-circadiano/.env up --build -d
+   ```
+
+3. Acesse:
+   - Frontend: http://localhost:8081
+   - API: http://localhost:8080/api
+
+4. Para acompanhar os logs:
+   ```bash
+   docker compose --env-file backend/ciclo-circadiano/.env logs -f
+   ```
+   Para ver o estado dos serviços:
+   ```bash
+   docker compose --env-file backend/ciclo-circadiano/.env ps
+   ```
+
+5. Para parar os serviços:
+   ```bash
+   docker compose --env-file backend/ciclo-circadiano/.env down
+   ```
+
+   Os dados do MySQL ficam no volume nomeado `dados_mysql` e são preservados ao executar `docker compose --env-file backend/ciclo-circadiano/.env down`. Para apagar também os dados persistidos, use `docker compose --env-file backend/ciclo-circadiano/.env down -v` — **isso remove permanentemente o volume do banco**.
+
+### Para que serve cada arquivo Docker
+
+- `docker-compose.yml`: define e conecta os três serviços (`frontend`, `backend` e `banco`), publica as portas, configura a persistência do MySQL e aguarda o banco ficar saudável antes de iniciar o backend.
+- `backend/ciclo-circadiano/Dockerfile`: compila o backend com o Maven Wrapper em uma etapa de build e executa o JAR em uma imagem Java 21 JRE separada, usando usuário sem privilégios.
+- `frontend/Dockerfile`: empacota os arquivos estáticos em uma imagem Nginx.
+- `frontend/nginx.conf`: configura o Nginx para servir os arquivos do frontend.
+- `backend/ciclo-circadiano/.env`: guarda configurações sensíveis localmente; deve ser criado a partir do `.env.example` e mantido fora do Git.
+
+### Observações importantes sobre Docker
+
+- Dentro do Compose, o backend acessa o MySQL pelo hostname `banco`, e não por `localhost`. O Compose define `DB_URL` corretamente no container do backend.
+- O navegador acessa o frontend em `localhost:8081` e a API em `localhost:8080`. Como o JavaScript do frontend roda no navegador do usuário, a URL da API configurada no frontend deve continuar apontando para `http://localhost:8080` quando a aplicação é acessada localmente.
+- O Compose pressupõe que o backend lê as variáveis `DB_URL`, `DB_USER`, `DB_PASSWORD` e `JWT_SECRET`, como descrito neste README. Se o código usar nomes diferentes ou carregar `.env` por uma biblioteca específica, ajuste as variáveis conforme a implementação.
+- O MySQL usa um volume nomeado para preservar os dados entre reinicializações.
+- A configuração usa `depends_on` com healthcheck para evitar que o backend tente conectar ao banco antes de ele aceitar conexões.
+
+## Executar sem Docker
 
 1. Instale o JDK 21 e o MySQL.
-2. Crie um banco de dados MySQL vazio.
-3. Configure as variáveis de ambiente do backend em `backend/ciclo-circadiano/.env`:
+2. Crie um banco de dados MySQL vazio chamado `banco_circadiano`.
+3. Configure `backend/ciclo-circadiano/.env` com as variáveis necessárias:
 
    ```properties
    DB_URL=jdbc:mysql://localhost:3306/banco_circadiano?useSSL=false&allowPublicKeyRetrieval=true
@@ -24,19 +99,20 @@ Aplicação web para autoavaliação de hábitos relacionados ao sono e ao ritmo
 
 4. Inicie o backend:
 
+   **PowerShell:**
    ```powershell
-   cd backend\ciclo-circadiano
+   cd backend/ciclo-circadiano
    .\mvnw.cmd spring-boot:run
    ```
 
-   A API estará disponível em `http://localhost:8080/api`. O Hibernate atualiza as tabelas do banco conforme as entidades da aplicação.
+   A API estará disponível em http://localhost:8080/api. O Hibernate atualiza as tabelas conforme as entidades da aplicação.
 
 5. Sirva os arquivos da pasta `frontend` com um servidor web local e abra `index.html`. A interface usa a API em `http://localhost:8080`.
 
 Para executar os testes automatizados do backend:
 
 ```powershell
-cd backend\ciclo-circadiano
+cd backend/ciclo-circadiano
 .\mvnw.cmd test
 ```
 

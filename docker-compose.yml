@@ -1,0 +1,60 @@
+services:
+  banco:
+    image: mysql:8.4
+    container_name: ciclo-circadiano-banco
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: banco_circadiano
+      MYSQL_USER: ${DB_USER:-ciclo_user}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?Defina DB_PASSWORD no arquivo backend/ciclo-circadiano/.env}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Defina MYSQL_ROOT_PASSWORD no arquivo backend/ciclo-circadiano/.env}
+    volumes:
+      - dados_mysql:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks:
+      - ciclo-net
+
+  backend:
+    build:
+      context: ./backend/ciclo-circadiano
+      dockerfile: Dockerfile
+    container_name: ciclo-circadiano-backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/ciclo-circadiano/.env
+    environment:
+      DB_URL: jdbc:mysql://banco:3306/banco_circadiano?useSSL=false&allowPublicKeyRetrieval=true
+      DB_USER: ${DB_USER:-ciclo_user}
+      DB_PASSWORD: ${DB_PASSWORD:?Defina DB_PASSWORD no arquivo backend/ciclo-circadiano/.env}
+    ports:
+      - "8080:8080"
+    depends_on:
+      banco:
+        condition: service_healthy
+    networks:
+      - ciclo-net
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: ciclo-circadiano-frontend
+    restart: unless-stopped
+    ports:
+      - "8081:80"
+    depends_on:
+      - backend
+    networks:
+      - ciclo-net
+
+volumes:
+  dados_mysql:
+
+networks:
+  ciclo-net:
+    driver: bridge

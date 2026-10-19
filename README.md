@@ -116,6 +116,49 @@ cd backend/ciclo-circadiano
 .\mvnw.cmd test
 ```
 
+## Testes automatizados e CI
+
+### Testes do backend
+
+Os testes usam um banco H2 em memória e uma chave JWT própria de teste. Por isso **não precisam de MySQL, Docker nem do arquivo `.env`**. Com o JDK 21 instalado, execute:
+
+```bash
+cd backend/ciclo-circadiano
+./mvnw test
+```
+
+**PowerShell:**
+```powershell
+cd backend/ciclo-circadiano
+.\mvnw.cmd test
+```
+
+O que é coberto: inicialização da aplicação, conexão com o banco, cadastro e login, proteção das rotas por JWT e as operações de perguntas e avaliações.
+
+### Smoke test da aplicação em container
+
+Valida a aplicação real em execução (backend + MySQL + frontend). Com o `.env` criado conforme a seção de Docker Compose:
+
+```bash
+docker compose --env-file backend/ciclo-circadiano/.env up --build -d --wait
+bash scripts/smoke-test.sh
+docker compose --env-file backend/ciclo-circadiano/.env down
+```
+
+O script exige `bash` e `curl` (no Windows, use Git Bash ou WSL). O `jq` é opcional e habilita a etapa de criação de avaliação. Endereços diferentes podem ser informados com `API_URL` e `FRONTEND_URL`.
+
+### Pipeline (GitHub Actions)
+
+O workflow `.github/workflows/ci.yml` executa a cada `push` e `pull_request` e possui três jobs:
+
+| Job | O que faz |
+| --- | --- |
+| `backend` | Instala as dependências, valida a sintaxe compilando o código e os testes e executa `./mvnw test` |
+| `seguranca` | Verifica se há arquivos `.env` versionados e se há chaves privadas ou tokens no repositório |
+| `docker` | Valida o `docker-compose.yml`, faz o build das imagens, sobe a aplicação, confere que o backend não roda como root e executa o smoke test |
+
+As actions são fixadas por commit SHA. O job `docker` só executa depois que o job `backend` passa.
+
 ## Uso da aplicação
 
 1. Crie uma conta na tela de cadastro.
